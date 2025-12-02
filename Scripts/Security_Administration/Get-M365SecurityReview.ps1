@@ -27,6 +27,10 @@
 .PARAMETER SkipDomains
     Array of domain names to skip during assessment.
 
+.PARAMETER IncludeMFAReport
+    Switch to generate a comprehensive MFA/2FA user report in addition to the security review.
+    This report includes detailed MFA status for all users, authentication methods, and risk analysis.
+
 .EXAMPLE
     .\Get-M365SecurityReview.ps1
     
@@ -41,6 +45,15 @@
     .\Get-M365SecurityReview.ps1 -SkipDomains "Device","Collaboration"
     
     Performs review skipping device and collaboration security assessments.
+
+.EXAMPLE
+    .\Get-M365SecurityReview.ps1 -IncludeMFAReport
+    
+    Performs full security review AND generates detailed MFA/2FA user report with:
+    - MFA status for all users
+    - Authentication methods used
+    - Admin accounts without MFA
+    - Risk analysis and recommendations
 
 .NOTES
     Author: Security Administrator Agent
@@ -63,7 +76,10 @@ param(
     [string]$Format = 'All',
     
     [Parameter(Mandatory=$false)]
-    [string[]]$SkipDomains = @()
+    [string[]]$SkipDomains = @(),
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludeMFAReport
 )
 
 #Requires -Version 5.1
@@ -186,6 +202,632 @@ function Invoke-GraphWithRetry {
             }
         }
     } while ($attempt -le $MaxRetries)
+}
+
+#endregion
+
+#region MFA Reporting Function
+
+function Get-MFAUserReport {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [string]$OutputPath = "."
+    )
+    
+    Write-Log "Generating comprehensive MFA/2FA user report..." -Level Info
+    
+    $mfaUsers = @()
+    $totalUsers = 0
+    $processedUsers = 0
+    
+    try {
+        # Get all users
+        Write-Log "Retrieving all user accounts..." -Level Info
+        $users = Invoke-GraphWithRetry -ScriptBlock {
+            Get-MgUser -All -Property Id,DisplayName,UserPrincipalName,AccountEnabled,UserType,CreatedDateTime -ErrorAction Stop
+        }
+        
+        $totalUsers = $users.Count
+        Write-Log "Found $totalUsers users to analyze" -Level Info
+        
+        foreach ($user in $users) {
+            $processedUsers++
+            Write-Progress -Activity "Analyzing MFA Status" `
+                -Status "Processing user $processedUsers of $totalUsers: $($user.UserPrincipalName)" `
+                -PercentComplete (($processedUsers / $totalUsers) * 100)
+            
+            try {
+                # Get authentication methods for user
+                $authMethods = Invoke-GraphWithRetry -ScriptBlock {
+                    Get-MgUserAuthenticationMethod -UserId $user.Id -ErrorAction SilentlyContinue
+                }
+                
+                # Parse authentication methods
+                $hasMicrosoftAuthenticator = $false
+                $hasPhone = $false
+                $hasSMS = $false
+                $hasEmail = $false
+                $hasFIDO2 = $false
+                $hasSoftwareOath = $false
+                $hasWindowsHello = $false
+                $methodsList = @()
+                
+                foreach ($method in $authMethods) {
+                    $methodType = $method.AdditionalProperties.'@odata.type'
+                    
+                    switch -Wildcard ($methodType) {
+                        "*microsoftAuthenticator*" {
+                            $hasMicrosoftAuthenticator = $true
+                            $methodsList += "Microsoft Authenticator"
+                        }
+                        "*phone*" {
+                            $hasPhone = $true
+                            $methodType = $method.AdditionalProperties.phoneType
+                            if ($methodType -eq "mobile") {
+                                $hasSMS = $true
+                                $methodsList += "Phone (Mobile/SMS)"
+                            } else {
+                                $methodsList += "Phone (Office)"
+                            }
+                        }
+                        "*email*" {
+                            $hasEmail = $true
+                            $methodsList += "Email"
+                        }
+                        "*fido2*" {
+                            $hasFIDO2 = $true
+                            $methodsList += "FIDO2 Security Key"
+                        }
+                        "*softwareOath*" {
+                            $hasSoftwareOath = $true
+                            $methodsList += "Software OATH Token"
+                        }
+                        "*windowsHello*" {
+                            $hasWindowsHello = $true
+                            $methodsList += "Windows Hello for Business"
+                        }
+                        "*password*" {
+                            # Password is always present, don't add to methods list
+                        }
+                        default {
+                            if ($methodType) {
+                                $methodsList += $methodType -replace '#microsoft.graph.', ''
+                            }
+                        }
+                    }
+                }
+                
+                # Determine MFA status
+                $mfaEnabled = $authMethods.Count -gt 1  # More than just password
+                $mfaMethodCount = $methodsList.Count
+                $mfaStatus = if ($mfaEnabled) { "Enabled" } else { "Disabled" }
+                
+                # Get sign-in activity (last sign-in)
+                $signInActivity = Invoke-GraphWithRetry -ScriptBlock {
+                    Get-MgUser -UserId $user.Id -Property SignInActivity -ErrorAction SilentlyContinue
+                }
+                
+                $lastSignIn = if ($signInActivity.SignInActivity.LastSignInDateTime) {
+                    $signInActivity.SignInActivity.LastSignInDateTime
+                } else {
+                    "Never"
+                }
+                
+                # Check if user is admin
+                $isAdmin = $false
+                try {
+                    $memberOf = Invoke-GraphWithRetry -ScriptBlock {
+                        Get-MgUserMemberOf -UserId $user.Id -All -ErrorAction SilentlyContinue
+                    }
+                    
+                    $adminGroups = $memberOf | Where-Object {
+                        $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' -and
+                        $_.AdditionalProperties.displayName -match "Administrator"
+                    }
+                    
+                    $isAdmin = $adminGroups.Count -gt 0
+                } catch {
+                    # Silently continue if we can't check admin status
+                }
+                
+                # Determine risk level
+                $riskLevel = "Low"
+                if (-not $mfaEnabled) {
+                    if ($isAdmin) {
+                        $riskLevel = "Critical"
+                    } elseif ($user.AccountEnabled) {
+                        $riskLevel = "High"
+                    } else {
+                        $riskLevel = "Medium"
+                    }
+                } elseif ($mfaEnabled -and $hasSMS -and -not $hasMicrosoftAuthenticator -and -not $hasFIDO2) {
+                    $riskLevel = "Medium"  # SMS-only is less secure
+                }
+                
+                # Create user MFA object
+                $mfaUser = [PSCustomObject]@{
+                    DisplayName = $user.DisplayName
+                    UserPrincipalName = $user.UserPrincipalName
+                    AccountEnabled = $user.AccountEnabled
+                    UserType = $user.UserType
+                    MFAStatus = $mfaStatus
+                    MFAMethodCount = $mfaMethodCount
+                    MFAMethods = ($methodsList -join "; ")
+                    HasMicrosoftAuthenticator = $hasMicrosoftAuthenticator
+                    HasPhoneAuth = $hasPhone
+                    HasSMS = $hasSMS
+                    HasEmail = $hasEmail
+                    HasFIDO2 = $hasFIDO2
+                    HasSoftwareOATH = $hasSoftwareOath
+                    HasWindowsHello = $hasWindowsHello
+                    IsAdmin = $isAdmin
+                    LastSignIn = $lastSignIn
+                    RiskLevel = $riskLevel
+                    CreatedDateTime = $user.CreatedDateTime
+                }
+                
+                $mfaUsers += $mfaUser
+                
+            } catch {
+                Write-Log "Error processing user $($user.UserPrincipalName): $($_.Exception.Message)" -Level Warning
+            }
+        }
+        
+        Write-Progress -Activity "Analyzing MFA Status" -Completed
+        
+        # Generate statistics
+        $stats = @{
+            TotalUsers = $mfaUsers.Count
+            MFAEnabled = ($mfaUsers | Where-Object { $_.MFAStatus -eq 'Enabled' }).Count
+            MFADisabled = ($mfaUsers | Where-Object { $_.MFAStatus -eq 'Disabled' }).Count
+            AdminsWithoutMFA = ($mfaUsers | Where-Object { $_.IsAdmin -eq $true -and $_.MFAStatus -eq 'Disabled' }).Count
+            EnabledUsersWithoutMFA = ($mfaUsers | Where-Object { $_.AccountEnabled -eq $true -and $_.MFAStatus -eq 'Disabled' }).Count
+            UsingAuthenticatorApp = ($mfaUsers | Where-Object { $_.HasMicrosoftAuthenticator -eq $true }).Count
+            UsingSMSOnly = ($mfaUsers | Where-Object { $_.HasSMS -eq $true -and $_.HasMicrosoftAuthenticator -eq $false -and $_.HasFIDO2 -eq $false }).Count
+            UsingFIDO2 = ($mfaUsers | Where-Object { $_.HasFIDO2 -eq $true }).Count
+            UsingWindowsHello = ($mfaUsers | Where-Object { $_.HasWindowsHello -eq $true }).Count
+            CriticalRisk = ($mfaUsers | Where-Object { $_.RiskLevel -eq 'Critical' }).Count
+            HighRisk = ($mfaUsers | Where-Object { $_.RiskLevel -eq 'High' }).Count
+            MediumRisk = ($mfaUsers | Where-Object { $_.RiskLevel -eq 'Medium' }).Count
+        }
+        
+        $mfaPercentage = if ($stats.TotalUsers -gt 0) {
+            [math]::Round(($stats.MFAEnabled / $stats.TotalUsers) * 100, 2)
+        } else {
+            0
+        }
+        
+        Write-Log "MFA Analysis Complete:" -Level Success
+        Write-Log "  Total Users: $($stats.TotalUsers)" -Level Info
+        Write-Log "  MFA Enabled: $($stats.MFAEnabled) ($mfaPercentage%)" -Level Info
+        Write-Log "  MFA Disabled: $($stats.MFADisabled)" -Level $(if ($stats.MFADisabled -gt 0) { 'Warning' } else { 'Info' })
+        Write-Log "  Admins Without MFA: $($stats.AdminsWithoutMFA)" -Level $(if ($stats.AdminsWithoutMFA -gt 0) { 'Error' } else { 'Info' })
+        Write-Log "  Critical Risk Users: $($stats.CriticalRisk)" -Level $(if ($stats.CriticalRisk -gt 0) { 'Error' } else { 'Info' })
+        
+        # Export reports
+        $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+        $exportedFiles = @()
+        
+        # CSV Export
+        $csvPath = Join-Path $OutputPath "MFA_User_Report_$timestamp.csv"
+        $mfaUsers | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Write-Log "MFA CSV report exported to: $csvPath" -Level Success
+        $exportedFiles += $csvPath
+        
+        # JSON Export with statistics
+        $jsonPath = Join-Path $OutputPath "MFA_User_Report_$timestamp.json"
+        $jsonReport = @{
+            GeneratedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Statistics = $stats
+            MFAAdoptionPercentage = $mfaPercentage
+            Users = $mfaUsers
+        }
+        $jsonReport | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
+        Write-Log "MFA JSON report exported to: $jsonPath" -Level Success
+        $exportedFiles += $jsonPath
+        
+        # HTML Export
+        $htmlPath = Join-Path $OutputPath "MFA_User_Report_$timestamp.html"
+        Export-MFAHTMLReport -Users $mfaUsers -Statistics $stats -OutputPath $htmlPath -MFAPercentage $mfaPercentage
+        Write-Log "MFA HTML report exported to: $htmlPath" -Level Success
+        $exportedFiles += $htmlPath
+        
+        # Try to open HTML report
+        if ($PSCmdlet.ShouldProcess($htmlPath, "Open in browser")) {
+            try {
+                Start-Process $htmlPath
+            } catch {
+                Write-Log "Could not open browser automatically" -Level Warning
+            }
+        }
+        
+        return @{
+            Users = $mfaUsers
+            Statistics = $stats
+            MFAPercentage = $mfaPercentage
+            ExportedFiles = $exportedFiles
+        }
+        
+    } catch {
+        Write-Log "Error generating MFA report: $($_.Exception.Message)" -Level Error
+        Write-Log "Stack trace: $($_.ScriptStackTrace)" -Level Error
+        throw
+    }
+}
+
+function Export-MFAHTMLReport {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [array]$Users,
+        
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Statistics,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$OutputPath,
+        
+        [Parameter(Mandatory=$true)]
+        [double]$MFAPercentage
+    )
+    
+    $css = @"
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+    }
+    .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    h1 { margin: 0 0 10px 0; font-size: 32px; }
+    .subtitle { opacity: 0.9; font-size: 16px; margin: 5px 0; }
+    .stats-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .stat-card {
+        background-color: white;
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    .stat-label {
+        font-size: 13px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 10px;
+    }
+    .stat-value {
+        font-size: 36px;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    .stat-green { color: #4caf50; }
+    .stat-red { color: #f44336; }
+    .stat-orange { color: #ff9800; }
+    .stat-blue { color: #2196f3; }
+    .stat-purple { color: #9c27b0; }
+    
+    .gauge-container {
+        grid-column: span 2;
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+    }
+    .gauge-value {
+        font-size: 60px;
+        font-weight: bold;
+        color: white;
+    }
+    
+    .section {
+        background-color: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .section h2 {
+        margin-top: 0;
+        color: #333;
+        border-bottom: 2px solid #667eea;
+        padding-bottom: 10px;
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    thead {
+        background-color: #667eea;
+        color: white;
+    }
+    th {
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+    }
+    td {
+        padding: 12px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    tr:hover {
+        background-color: #f5f5f5;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    .badge-enabled { background-color: #4caf50; color: white; }
+    .badge-disabled { background-color: #f44336; color: white; }
+    .badge-critical { background-color: #d32f2f; color: white; }
+    .badge-high { background-color: #f57c00; color: white; }
+    .badge-medium { background-color: #ffa726; color: white; }
+    .badge-low { background-color: #66bb6a; color: white; }
+    .badge-yes { background-color: #2196f3; color: white; }
+    .badge-no { background-color: #9e9e9e; color: white; }
+    
+    .filter-buttons {
+        margin: 20px 0;
+    }
+    .filter-btn {
+        padding: 8px 16px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        background-color: #667eea;
+        color: white;
+        font-size: 14px;
+    }
+    .filter-btn:hover {
+        background-color: #5568d3;
+    }
+    .filter-btn.active {
+        background-color: #764ba2;
+    }
+    
+    .footer {
+        text-align: center;
+        margin-top: 40px;
+        padding: 20px;
+        background-color: white;
+        border-radius: 10px;
+        color: #666;
+        font-size: 14px;
+    }
+</style>
+"@
+    
+    # Generate user table rows
+    $tableRows = ""
+    foreach ($user in $Users | Sort-Object RiskLevel,DisplayName) {
+        $mfaStatusBadge = if ($user.MFAStatus -eq 'Enabled') { 
+            "<span class='badge badge-enabled'>Enabled</span>" 
+        } else { 
+            "<span class='badge badge-disabled'>Disabled</span>" 
+        }
+        
+        $riskBadge = switch ($user.RiskLevel) {
+            'Critical' { "<span class='badge badge-critical'>Critical</span>" }
+            'High' { "<span class='badge badge-high'>High</span>" }
+            'Medium' { "<span class='badge badge-medium'>Medium</span>" }
+            'Low' { "<span class='badge badge-low'>Low</span>" }
+        }
+        
+        $adminBadge = if ($user.IsAdmin) {
+            "<span class='badge badge-yes'>Yes</span>"
+        } else {
+            "<span class='badge badge-no'>No</span>"
+        }
+        
+        $enabledBadge = if ($user.AccountEnabled) {
+            "<span class='badge badge-enabled'>Enabled</span>"
+        } else {
+            "<span class='badge badge-no'>Disabled</span>"
+        }
+        
+        $tableRows += @"
+        <tr class='user-row' data-risk='$($user.RiskLevel)' data-mfa='$($user.MFAStatus)' data-admin='$($user.IsAdmin)'>
+            <td>$($user.DisplayName)</td>
+            <td>$($user.UserPrincipalName)</td>
+            <td>$enabledBadge</td>
+            <td>$mfaStatusBadge</td>
+            <td>$($user.MFAMethods)</td>
+            <td>$adminBadge</td>
+            <td>$riskBadge</td>
+            <td>$($user.LastSignIn)</td>
+        </tr>
+"@
+    }
+    
+    $html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>MFA/2FA User Report - Microsoft 365</title>
+    $css
+</head>
+<body>
+    <div class='header'>
+        <h1>🔐 MFA/2FA User Report</h1>
+        <div class='subtitle'>Microsoft 365 Multi-Factor Authentication Status</div>
+        <div class='subtitle'>Generated: $(Get-Date -Format 'dddd, MMMM dd, yyyy - HH:mm:ss')</div>
+    </div>
+    
+    <div class='stats-container'>
+        <div class='stat-card gauge-container'>
+            <div class='stat-label'>MFA Adoption Rate</div>
+            <div class='gauge-value'>$([math]::Round($MFAPercentage, 1))%</div>
+            <div style='font-size: 14px; margin-top: 10px;'>$($Statistics.MFAEnabled) of $($Statistics.TotalUsers) users</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>Total Users</div>
+            <div class='stat-value stat-blue'>$($Statistics.TotalUsers)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>MFA Enabled</div>
+            <div class='stat-value stat-green'>$($Statistics.MFAEnabled)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>MFA Disabled</div>
+            <div class='stat-value stat-red'>$($Statistics.MFADisabled)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>Admins Without MFA</div>
+            <div class='stat-value stat-red'>$($Statistics.AdminsWithoutMFA)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>Critical Risk</div>
+            <div class='stat-value stat-red'>$($Statistics.CriticalRisk)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>Using Authenticator App</div>
+            <div class='stat-value stat-green'>$($Statistics.UsingAuthenticatorApp)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>Using FIDO2</div>
+            <div class='stat-value stat-purple'>$($Statistics.UsingFIDO2)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>SMS Only (Less Secure)</div>
+            <div class='stat-value stat-orange'>$($Statistics.UsingSMSOnly)</div>
+        </div>
+        
+        <div class='stat-card'>
+            <div class='stat-label'>Windows Hello</div>
+            <div class='stat-value stat-blue'>$($Statistics.UsingWindowsHello)</div>
+        </div>
+    </div>
+    
+    <div class='section'>
+        <h2>User Details</h2>
+        
+        <div class='filter-buttons'>
+            <button class='filter-btn active' onclick='filterTable("all")'>All Users</button>
+            <button class='filter-btn' onclick='filterTable("mfa-disabled")'>MFA Disabled</button>
+            <button class='filter-btn' onclick='filterTable("admins-no-mfa")'>Admins Without MFA</button>
+            <button class='filter-btn' onclick='filterTable("critical")'>Critical Risk</button>
+            <button class='filter-btn' onclick='filterTable("high")'>High Risk</button>
+        </div>
+        
+        <table id='userTable'>
+            <thead>
+                <tr>
+                    <th>Display Name</th>
+                    <th>User Principal Name</th>
+                    <th>Account Status</th>
+                    <th>MFA Status</th>
+                    <th>MFA Methods</th>
+                    <th>Is Admin</th>
+                    <th>Risk Level</th>
+                    <th>Last Sign-In</th>
+                </tr>
+            </thead>
+            <tbody>
+                $tableRows
+            </tbody>
+        </table>
+    </div>
+    
+    <div class='section'>
+        <h2>📊 MFA Method Distribution</h2>
+        <ul style='font-size: 16px; line-height: 2;'>
+            <li><strong>Microsoft Authenticator App:</strong> $($Statistics.UsingAuthenticatorApp) users (✅ Recommended)</li>
+            <li><strong>FIDO2 Security Keys:</strong> $($Statistics.UsingFIDO2) users (✅ Most Secure)</li>
+            <li><strong>Windows Hello for Business:</strong> $($Statistics.UsingWindowsHello) users (✅ Recommended)</li>
+            <li><strong>SMS Only:</strong> $($Statistics.UsingSMSOnly) users (⚠️ Less Secure - Consider upgrading)</li>
+        </ul>
+    </div>
+    
+    <div class='section'>
+        <h2>🎯 Recommendations</h2>
+        <ol style='font-size: 16px; line-height: 2;'>
+            <li><strong>Immediate Action:</strong> Enable MFA for all $($Statistics.AdminsWithoutMFA) administrators without MFA</li>
+            <li><strong>High Priority:</strong> Enable MFA for $($Statistics.EnabledUsersWithoutMFA) active users without MFA</li>
+            <li><strong>Security Upgrade:</strong> Migrate $($Statistics.UsingSMSOnly) SMS-only users to Microsoft Authenticator or FIDO2</li>
+            <li><strong>Best Practice:</strong> Implement Conditional Access policies to enforce MFA for all users</li>
+            <li><strong>Advanced Security:</strong> Deploy FIDO2 security keys for privileged accounts</li>
+        </ol>
+    </div>
+    
+    <div class='footer'>
+        <strong>Microsoft 365 MFA/2FA User Report</strong><br>
+        Powered by PowerShell Automation | Security Administrator Agent<br>
+        This report contains confidential security information
+    </div>
+    
+    <script>
+        function filterTable(filter) {
+            const rows = document.querySelectorAll('.user-row');
+            const buttons = document.querySelectorAll('.filter-btn');
+            
+            // Update active button
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Filter rows
+            rows.forEach(row => {
+                const risk = row.getAttribute('data-risk');
+                const mfa = row.getAttribute('data-mfa');
+                const isAdmin = row.getAttribute('data-admin') === 'True';
+                
+                let show = false;
+                
+                switch(filter) {
+                    case 'all':
+                        show = true;
+                        break;
+                    case 'mfa-disabled':
+                        show = mfa === 'Disabled';
+                        break;
+                    case 'admins-no-mfa':
+                        show = isAdmin && mfa === 'Disabled';
+                        break;
+                    case 'critical':
+                        show = risk === 'Critical';
+                        break;
+                    case 'high':
+                        show = risk === 'High';
+                        break;
+                }
+                
+                row.style.display = show ? '' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>
+"@
+    
+    $html | Out-File -FilePath $OutputPath -Encoding UTF8
 }
 
 #endregion
@@ -1474,6 +2116,31 @@ try {
         $exportedFiles += $jsonFile
     }
     
+    # Generate MFA Report if requested
+    $mfaReport = $null
+    if ($IncludeMFAReport) {
+        Write-Log "========================================" -Level Info
+        Write-Log "Generating MFA/2FA User Report" -Level Info
+        Write-Log "========================================" -Level Info
+        
+        try {
+            $mfaReport = Get-MFAUserReport -OutputPath $OutputPath
+            $exportedFiles += $mfaReport.ExportedFiles
+            
+            Write-Log "========================================" -Level Success
+            Write-Log "MFA Report Complete!" -Level Success
+            Write-Log "========================================" -Level Success
+            Write-Log "MFA Statistics:" -Level Info
+            Write-Log "  Total Users: $($mfaReport.Statistics.TotalUsers)" -Level Info
+            Write-Log "  MFA Enabled: $($mfaReport.Statistics.MFAEnabled) ($($mfaReport.MFAPercentage)%)" -Level Success
+            Write-Log "  MFA Disabled: $($mfaReport.Statistics.MFADisabled)" -Level $(if ($mfaReport.Statistics.MFADisabled -gt 0) { 'Warning' } else { 'Info' })
+            Write-Log "  Admins Without MFA: $($mfaReport.Statistics.AdminsWithoutMFA)" -Level $(if ($mfaReport.Statistics.AdminsWithoutMFA -gt 0) { 'Error' } else { 'Info' })
+        }
+        catch {
+            Write-Log "Error generating MFA report: $($_.Exception.Message)" -Level Error
+        }
+    }
+    
     Write-Log "========================================" -Level Success
     Write-Log "Security Review Complete!" -Level Success
     Write-Log "========================================" -Level Success
@@ -1483,7 +2150,7 @@ try {
     }
     
     # Return summary object
-    return [PSCustomObject]@{
+    $summary = [PSCustomObject]@{
         TotalFindings = $script:Findings.Count
         CriticalFindings = ($script:Findings | Where-Object { $_.Risk -eq 'Critical' }).Count
         HighFindings = ($script:Findings | Where-Object { $_.Risk -eq 'High' }).Count
@@ -1492,6 +2159,13 @@ try {
         Duration = (Get-Date) - $script:StartTime
         ExportedFiles = $exportedFiles
     }
+    
+    # Add MFA report data if generated
+    if ($mfaReport) {
+        $summary | Add-Member -NotePropertyName "MFAReport" -NotePropertyValue $mfaReport
+    }
+    
+    return $summary
 }
 catch {
     Write-Log "Critical error during security review: $($_.Exception.Message)" -Level Error

@@ -8,6 +8,10 @@ This directory contains PowerShell scripts for Microsoft 365 security administra
 
 Performs a comprehensive security review of your Microsoft 365 environment across 10 critical security domains.
 
+### Get-MFAUserReport.ps1
+
+Generates detailed MFA/2FA status reports for all Microsoft 365 users. Can be run standalone or integrated with the security review.
+
 #### Overview
 
 This production-ready script conducts a thorough security assessment and generates detailed reports with:
@@ -146,6 +150,24 @@ Connect-SPOService -Url "https://yourtenant-admin.sharepoint.com"
 Connect-MicrosoftTeams
 ```
 
+#### MFA/2FA User Reporting
+
+The security review can optionally generate a comprehensive MFA/2FA user status report:
+
+```powershell
+.\Get-M365SecurityReview.ps1 -IncludeMFAReport
+```
+
+This generates additional MFA reports including:
+- **MFA Status** for all users (Enabled/Disabled)
+- **Authentication Methods** used (Authenticator, SMS, FIDO2, etc.)
+- **Admin Accounts Without MFA** (Critical risk!)
+- **MFA Adoption Percentage**
+- **Risk Analysis** for each user
+- **Interactive HTML Dashboard** with filtering
+
+See **MFA_REPORT_GUIDE.md** for complete MFA reporting documentation.
+
 #### Output Files
 
 The script generates three types of reports:
@@ -277,11 +299,127 @@ For issues, questions, or suggestions:
 3. Consult Microsoft documentation links in findings
 4. Contact your security team for environment-specific questions
 
+---
+
+## Get-MFAUserReport.ps1 - Standalone MFA Reporting
+
+### Overview
+
+Dedicated script for comprehensive MFA/2FA user status reporting. Perfect for:
+- Regular MFA compliance checks
+- Security audits
+- MFA adoption tracking
+- Admin account verification
+
+### Quick Start
+
+```powershell
+# Generate MFA report for all users
+.\Get-MFAUserReport.ps1
+
+# Generate HTML report only
+.\Get-MFAUserReport.ps1 -ExportFormat HTML
+
+# Check administrators only
+.\Get-MFAUserReport.ps1 -AdminsOnly
+
+# Exclude disabled accounts
+.\Get-MFAUserReport.ps1 -IncludeDisabledUsers:$false
+```
+
+### What's Included
+
+**User Analysis:**
+- MFA Status (Enabled/Disabled)
+- Authentication Methods (Authenticator App, SMS, FIDO2, Windows Hello, Email)
+- Admin Status
+- Account Status
+- Last Sign-In Date
+- Risk Level (Critical, High, Medium, Low)
+
+**Statistics:**
+- MFA Adoption Percentage
+- Admins Without MFA (Critical!)
+- Users by authentication method
+- Risk distribution
+- Method comparison
+
+**Interactive HTML Report:**
+- Visual MFA adoption gauge
+- Statistics dashboard
+- Filterable user table (All, MFA Disabled, Admins Without MFA, Critical Risk, High Risk)
+- MFA method distribution
+- Actionable recommendations
+
+### Parameters
+
+- **OutputPath** - Where to save reports (default: current directory)
+- **ExportFormat** - HTML, CSV, JSON, or All (default: All)
+- **IncludeDisabledUsers** - Include disabled accounts (default: $true)
+- **AdminsOnly** - Report on administrators only (default: $false)
+
+### Prerequisites
+
+```powershell
+# Required module
+Install-Module Microsoft.Graph
+
+# Required permissions
+Connect-MgGraph -Scopes "User.Read.All","UserAuthenticationMethod.Read.All","Directory.Read.All"
+```
+
+### Use Cases
+
+**1. Security Audit Preparation**
+```powershell
+.\Get-MFAUserReport.ps1 -OutputPath "C:\Audit\MFA"
+```
+
+**2. Admin Account Verification**
+```powershell
+.\Get-MFAUserReport.ps1 -AdminsOnly
+```
+
+**3. Weekly MFA Compliance Check**
+```powershell
+.\Get-MFAUserReport.ps1 -ExportFormat HTML -IncludeDisabledUsers:$false
+```
+
+**4. Track MFA Rollout Progress**
+```powershell
+# Generate reports over time
+.\Get-MFAUserReport.ps1 -OutputPath "C:\MFATracking\Week1"
+.\Get-MFAUserReport.ps1 -OutputPath "C:\MFATracking\Week2"
+# Compare MFA adoption percentage
+```
+
+### Output Examples
+
+**Console Output:**
+```
+Total Users: 150
+MFA Enabled: 135 (90.0%)
+MFA Disabled: 15
+Admins Without MFA: 0
+Critical Risk Users: 0
+```
+
+**Files Generated:**
+- `MFA_User_Report_YYYYMMDD_HHMMSS.html` - Interactive dashboard
+- `MFA_User_Report_YYYYMMDD_HHMMSS.csv` - Detailed data
+- `MFA_User_Report_YYYYMMDD_HHMMSS.json` - Statistics and data
+
+### See Also
+
+- **MFA_REPORT_GUIDE.md** - Complete MFA reporting documentation
+- **Get-M365SecurityReview.ps1** - Full security assessment with MFA report option
+
+---
+
 #### Related Scripts
 
-- **Get-ConditionalAccessReport.ps1** - Detailed CA policy analysis
-- **Get-MFAStatus.ps1** - User MFA registration status
-- **Get-PrivilegedAccessAudit.ps1** - Admin account audit
+- **Get-M365SecurityReview.ps1** - Comprehensive security review
+- **Get-MFAUserReport.ps1** - Standalone MFA/2FA user report
 
 ---
 
