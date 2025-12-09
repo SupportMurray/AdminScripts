@@ -18,6 +18,7 @@ from utils.database import ExecutionDatabase
 from utils.script_scanner import ScriptScanner
 from utils.script_parser import ScriptParser
 from utils.powershell_executor import PowerShellExecutor
+from utils.schedule_manager import ScheduleManager
 
 # Initialize Flask app
 app = Flask(__name__, static_folder='frontend/build', static_url_path='')
@@ -54,6 +55,14 @@ parser = ScriptParser(config['powershell']['executable'])
 executor = PowerShellExecutor(
     pwsh_path=config['powershell']['executable'],
     timeout=config['powershell']['timeout_seconds']
+)
+
+# Initialize schedule manager
+scripts_base_path = Path(config['paths']['scripts_directory']).resolve()
+schedule_manager = ScheduleManager(
+    scripts_directory=str(scripts_base_path),
+    pwsh_path=config['powershell']['executable'],
+    log_directory=str(scripts_base_path.parent / "Logs" / "Scheduled")
 )
 
 # Active executions tracking
@@ -456,6 +465,314 @@ def get_categories():
         'success': True,
         'categories': categories
     })
+
+
+#region Schedule Endpoints
+
+@app.route('/api/schedules', methods=['GET'])
+def get_schedules():
+    """Get all scheduled tasks"""
+    try:
+        schedules = db.get_schedules()
+        
+        # Enrich with cron job status
+        for schedule in schedules:
+            cron_info = schedule_manager.get_schedule(schedule['id'])
+            if cron_info:
+                schedule['cron_active'] = True
+                schedule['next_run'] = cron_info.get('next_run')
+            else:
+                schedule['cron_active'] = False
+        
+        return jsonify({
+            'success': True,
+            'schedules': schedules
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching schedules: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/schedules', methods=['POST'])
+def create_schedule():
+    """Create a new scheduled task"""
+    try:
+        data = request.json
+        
+        # Validate required fields
+        required = ['name', 'script_path', 'cron_expression']
+        for field in required:
+            if not data.get(field):
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        # Validate cron expression
+        validation = ScheduleManager.validate_cron_expression(data['cron_expression'])
+        if not validation['valid']:
+            return jsonify({
+                'success': False,
+                'error': f"Invalid cron expression: {validation['error']}"
+            }), 400
+        
+        # Create in database
+        schedule_id = db.create_schedule(
+            name=data['name'],
+            script_path=data['script_path'],
+            cron_expression=data['cron_expression'],
+            parameters=data.get('parameters', {}),
+            description=data.get('description', ''),
+            enabled=data.get('enabled', True)
+        )
+        
+        # Create cron job if enabled
+        if data.get('enabled', True):
+            result = schedule_manager.create_schedule(
+                schedule_id=schedule_id,
+                script_path=data['script_path'],
+                cron_expression=data['cron_expression'],
+                parameters=data.get('parameters', {}),
+                enabled=True
+            )
+            
+            if result.get('next_run'):
+                db.update_schedule(schedule_id, next_run=result['next_run'])
+        
+        return jsonify({
+            'success': True,
+            'schedule_id': schedule_id,
+            'message': f"Schedule '{data['name']}' created successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating schedule: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/schedules/<int:schedule_id>', methods=['GET'])
+def get_schedule(schedule_id):
+    """Get a specific schedule"""
+    try:
+        schedule = db.get_schedule(schedule_id)
+        
+        if not schedule:
+            return jsonify({
+                'success': False,
+                'error': 'Schedule not found'
+            }), 404
+        
+        # Get cron status
+        cron_info = schedule_manager.get_schedule(schedule_id)
+        if cron_info:
+            schedule['cron_active'] = True
+            schedule['next_run'] = cron_info.get('next_run')
+        else:
+            schedule['cron_active'] = False
+        
+        return jsonify({
+            'success': True,
+            'schedule': schedule
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching schedule: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/schedules/<int:schedule_id>', methods=['PUT'])
+def update_schedule(schedule_id):
+    """Update a schedule"""
+    try:
+        data = request.json
+        
+        # Get existing schedule
+        schedule = db.get_schedule(schedule_id)
+        if not schedule:
+            return jsonify({
+                'success': False,
+                'error': 'Schedule not found'
+            }), 404
+        
+        # Validate cron expression if provided
+        if data.get('cron_expression'):
+            validation = ScheduleManager.validate_cron_expression(data['cron_expression'])
+            if not validation['valid']:
+                return jsonify({
+                    'success': False,
+                    'error': f"Invalid cron expression: {validation['error']}"
+                }), 400
+        
+        # Update database
+        db.update_schedule(
+            schedule_id,
+            name=data.get('name'),
+            cron_expression=data.get('cron_expression'),
+            parameters=data.get('parameters'),
+            description=data.get('description'),
+            enabled=data.get('enabled')
+        )
+        
+        # Update cron job
+        updated_schedule = db.get_schedule(schedule_id)
+        if updated_schedule['enabled']:
+            result = schedule_manager.create_schedule(
+                schedule_id=schedule_id,
+                script_path=updated_schedule['script_path'],
+                cron_expression=updated_schedule['cron_expression'],
+                parameters=updated_schedule['parameters'],
+                enabled=True
+            )
+            if result.get('next_run'):
+                db.update_schedule(schedule_id, next_run=result['next_run'])
+        else:
+            schedule_manager.delete_schedule(schedule_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Schedule updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating schedule: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/schedules/<int:schedule_id>', methods=['DELETE'])
+def delete_schedule(schedule_id):
+    """Delete a schedule"""
+    try:
+        # Delete cron job
+        schedule_manager.delete_schedule(schedule_id)
+        
+        # Delete from database
+        db.delete_schedule(schedule_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Schedule deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting schedule: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/schedules/<int:schedule_id>/toggle', methods=['POST'])
+def toggle_schedule(schedule_id):
+    """Enable or disable a schedule"""
+    try:
+        data = request.json
+        enabled = data.get('enabled', True)
+        
+        schedule = db.get_schedule(schedule_id)
+        if not schedule:
+            return jsonify({
+                'success': False,
+                'error': 'Schedule not found'
+            }), 404
+        
+        # Update database
+        db.update_schedule(schedule_id, enabled=enabled)
+        
+        # Update cron
+        if enabled:
+            result = schedule_manager.create_schedule(
+                schedule_id=schedule_id,
+                script_path=schedule['script_path'],
+                cron_expression=schedule['cron_expression'],
+                parameters=schedule['parameters'],
+                enabled=True
+            )
+            next_run = result.get('next_run')
+        else:
+            schedule_manager.delete_schedule(schedule_id)
+            next_run = None
+        
+        if next_run:
+            db.update_schedule(schedule_id, next_run=next_run)
+        
+        return jsonify({
+            'success': True,
+            'enabled': enabled,
+            'next_run': next_run
+        })
+        
+    except Exception as e:
+        logger.error(f"Error toggling schedule: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/schedules/presets', methods=['GET'])
+def get_schedule_presets():
+    """Get common cron schedule presets"""
+    return jsonify({
+        'success': True,
+        'presets': ScheduleManager.get_preset_schedules()
+    })
+
+
+@app.route('/api/schedules/validate', methods=['POST'])
+def validate_cron():
+    """Validate a cron expression"""
+    try:
+        data = request.json
+        expression = data.get('expression', '')
+        
+        result = ScheduleManager.validate_cron_expression(expression)
+        
+        return jsonify({
+            'success': True,
+            **result
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'valid': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/schedules/<int:schedule_id>/logs', methods=['GET'])
+def get_schedule_logs(schedule_id):
+    """Get logs for a scheduled task"""
+    try:
+        lines = request.args.get('lines', 100, type=int)
+        result = schedule_manager.get_schedule_logs(schedule_id, lines)
+        
+        return jsonify({
+            'success': True,
+            **result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching schedule logs: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+#endregion
 
 
 #endregion

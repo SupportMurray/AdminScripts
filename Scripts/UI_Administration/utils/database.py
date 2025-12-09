@@ -47,7 +47,7 @@ class ExecutionDatabase:
                 )
             ''')
             
-            # Create indexes
+            # Create indexes for executions
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_script_path 
                 ON executions(script_path)
@@ -61,6 +61,38 @@ class ExecutionDatabase:
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_started_at 
                 ON executions(started_at DESC)
+            ''')
+            
+            # Create schedules table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    script_path TEXT NOT NULL,
+                    script_name TEXT NOT NULL,
+                    category TEXT,
+                    cron_expression TEXT NOT NULL,
+                    parameters TEXT,
+                    enabled INTEGER DEFAULT 1,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    last_run TIMESTAMP,
+                    next_run TIMESTAMP,
+                    run_count INTEGER DEFAULT 0,
+                    last_status TEXT,
+                    description TEXT
+                )
+            ''')
+            
+            # Create indexes for schedules
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_schedule_enabled 
+                ON schedules(enabled)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_schedule_script 
+                ON schedules(script_path)
             ''')
             
             self.conn.commit()
@@ -319,4 +351,218 @@ class ExecutionDatabase:
         if self.conn:
             self.conn.close()
             logger.info("Database connection closed")
+    
+    # ==================== Schedule Methods ====================
+    
+    def create_schedule(
+        self,
+        name: str,
+        script_path: str,
+        cron_expression: str,
+        parameters: Dict[str, Any] = None,
+        description: str = None,
+        enabled: bool = True
+    ) -> int:
+        """Create a new schedule"""
+        try:
+            if not self.conn:
+                self.initialize()
+            
+            script_name = Path(script_path).name
+            parts = Path(script_path).parts
+            category = parts[-2].replace('_Administration', '') if len(parts) > 1 else None
+            
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO schedules (
+                    name, script_path, script_name, category, cron_expression,
+                    parameters, enabled, created_at, updated_at, description
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                name,
+                script_path,
+                script_name,
+                category,
+                cron_expression,
+                json.dumps(parameters or {}),
+                1 if enabled else 0,
+                datetime.now().isoformat(),
+                datetime.now().isoformat(),
+                description
+            ))
+            
+            self.conn.commit()
+            schedule_id = cursor.lastrowid
+            
+            logger.info(f"Created schedule {schedule_id}: {name} ({cron_expression})")
+            return schedule_id
+            
+        except Exception as e:
+            logger.error(f"Error creating schedule: {e}", exc_info=True)
+            raise
+    
+    def get_schedule(self, schedule_id: int) -> Optional[Dict]:
+        """Get a specific schedule"""
+        try:
+            if not self.conn:
+                self.initialize()
+            
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT * FROM schedules WHERE id = ?', (schedule_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+            
+            return self._row_to_schedule(row)
+            
+        except Exception as e:
+            logger.error(f"Error fetching schedule: {e}", exc_info=True)
+            return None
+    
+    def get_schedules(self, enabled_only: bool = False) -> List[Dict]:
+        """Get all schedules"""
+        try:
+            if not self.conn:
+                self.initialize()
+            
+            cursor = self.conn.cursor()
+            
+            if enabled_only:
+                cursor.execute('SELECT * FROM schedules WHERE enabled = 1 ORDER BY name')
+            else:
+                cursor.execute('SELECT * FROM schedules ORDER BY name')
+            
+            rows = cursor.fetchall()
+            return [self._row_to_schedule(row) for row in rows]
+            
+        except Exception as e:
+            logger.error(f"Error fetching schedules: {e}", exc_info=True)
+            return []
+    
+    def update_schedule(
+        self,
+        schedule_id: int,
+        name: str = None,
+        cron_expression: str = None,
+        parameters: Dict[str, Any] = None,
+        description: str = None,
+        enabled: bool = None,
+        next_run: str = None
+    ) -> bool:
+        """Update a schedule"""
+        try:
+            if not self.conn:
+                self.initialize()
+            
+            updates = []
+            params = []
+            
+            if name is not None:
+                updates.append('name = ?')
+                params.append(name)
+            if cron_expression is not None:
+                updates.append('cron_expression = ?')
+                params.append(cron_expression)
+            if parameters is not None:
+                updates.append('parameters = ?')
+                params.append(json.dumps(parameters))
+            if description is not None:
+                updates.append('description = ?')
+                params.append(description)
+            if enabled is not None:
+                updates.append('enabled = ?')
+                params.append(1 if enabled else 0)
+            if next_run is not None:
+                updates.append('next_run = ?')
+                params.append(next_run)
+            
+            if not updates:
+                return True
+            
+            updates.append('updated_at = ?')
+            params.append(datetime.now().isoformat())
+            params.append(schedule_id)
+            
+            cursor = self.conn.cursor()
+            cursor.execute(
+                f'UPDATE schedules SET {", ".join(updates)} WHERE id = ?',
+                params
+            )
+            
+            self.conn.commit()
+            logger.info(f"Updated schedule {schedule_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating schedule: {e}", exc_info=True)
+            return False
+    
+    def delete_schedule(self, schedule_id: int) -> bool:
+        """Delete a schedule"""
+        try:
+            if not self.conn:
+                self.initialize()
+            
+            cursor = self.conn.cursor()
+            cursor.execute('DELETE FROM schedules WHERE id = ?', (schedule_id,))
+            self.conn.commit()
+            
+            logger.info(f"Deleted schedule {schedule_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting schedule: {e}", exc_info=True)
+            return False
+    
+    def log_schedule_run(
+        self,
+        schedule_id: int,
+        status: str,
+        next_run: str = None
+    ) -> bool:
+        """Log a schedule execution"""
+        try:
+            if not self.conn:
+                self.initialize()
+            
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                UPDATE schedules 
+                SET last_run = ?, last_status = ?, run_count = run_count + 1, next_run = ?
+                WHERE id = ?
+            ''', (
+                datetime.now().isoformat(),
+                status,
+                next_run,
+                schedule_id
+            ))
+            
+            self.conn.commit()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error logging schedule run: {e}", exc_info=True)
+            return False
+    
+    def _row_to_schedule(self, row) -> Dict:
+        """Convert database row to schedule dict"""
+        return {
+            'id': row['id'],
+            'name': row['name'],
+            'script_path': row['script_path'],
+            'script_name': row['script_name'],
+            'category': row['category'],
+            'cron_expression': row['cron_expression'],
+            'parameters': json.loads(row['parameters']) if row['parameters'] else {},
+            'enabled': bool(row['enabled']),
+            'created_at': row['created_at'],
+            'updated_at': row['updated_at'],
+            'last_run': row['last_run'],
+            'next_run': row['next_run'],
+            'run_count': row['run_count'],
+            'last_status': row['last_status'],
+            'description': row['description']
+        }
 

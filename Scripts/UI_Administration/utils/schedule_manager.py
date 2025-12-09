@@ -331,15 +331,25 @@ class ScheduleManager:
                     "error": "Cron expression must have 5 parts: minute hour day month weekday"
                 }
             
-            # Create a temporary job to validate
-            temp_cron = CronTab(tab="")
-            job = temp_cron.new(command="echo test")
-            job.setall(expression)
+            # Validate using croniter
+            from croniter import croniter
+            from datetime import datetime
+            
+            base = datetime.now()
+            cron = croniter(expression, base)
+            
+            # Get next 5 run times
+            next_runs = []
+            for _ in range(5):
+                next_runs.append(cron.get_next(datetime).isoformat())
+            
+            # Generate human-readable description
+            description = ScheduleManager._describe_cron(expression)
             
             return {
                 "valid": True,
-                "description": str(job.description()),
-                "next_runs": [str(t) for t in job.schedule().get_next(5)]
+                "description": description,
+                "next_runs": next_runs
             }
             
         except Exception as e:
@@ -347,6 +357,38 @@ class ScheduleManager:
                 "valid": False,
                 "error": str(e)
             }
+    
+    @staticmethod
+    def _describe_cron(expression: str) -> str:
+        """Generate human-readable description of cron expression"""
+        parts = expression.strip().split()
+        if len(parts) != 5:
+            return expression
+        
+        minute, hour, day, month, weekday = parts
+        
+        # Simple descriptions for common patterns
+        if expression == "* * * * *":
+            return "Every minute"
+        if minute == "0" and hour == "*":
+            return "Every hour"
+        if minute.startswith("*/"):
+            return f"Every {minute[2:]} minutes"
+        if hour.startswith("*/"):
+            return f"Every {hour[2:]} hours at minute {minute}"
+        if minute == "0" and day == "*" and month == "*":
+            if weekday == "*":
+                return f"Daily at {hour}:00"
+            if weekday == "1-5":
+                return f"Weekdays at {hour}:00"
+            if weekday in ["0", "7"]:
+                return f"Sundays at {hour}:00"
+            if weekday == "1":
+                return f"Mondays at {hour}:00"
+        if minute == "0" and hour == "0" and day == "1" and month == "*":
+            return "First day of every month at midnight"
+        
+        return f"At {minute} minutes past hour {hour}"
     
     @staticmethod
     def get_preset_schedules() -> List[Dict]:

@@ -5,13 +5,15 @@ import {
   ListItemButton, ListItemIcon, ListItemText, Grid, Card,
   CardContent, Button, TextField, Select, MenuItem, FormControl,
   InputLabel, Chip, Alert, CircularProgress, Paper, Divider, IconButton,
-  Dialog, DialogTitle, DialogContent, DialogActions
+  Dialog, DialogTitle, DialogContent, DialogActions, Switch, FormControlLabel,
+  Tooltip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon, People, Email, Folder, Forum, Security,
   Assignment, VerifiedUser, Assessment, PhoneAndroid, Settings,
   PlayArrow, History, Refresh, Menu as MenuIcon,
-  DarkMode, LightMode, Close
+  DarkMode, LightMode, Close, Schedule, Add, Delete, Edit,
+  PowerSettingsNew, Build
 } from '@mui/icons-material';
 
 // Use relative URL for production (nginx proxy), absolute for development
@@ -53,7 +55,7 @@ const categoryIcons = {
   'Intune': <PhoneAndroid />,
   'Global': <Settings />,
   'UI': <DashboardIcon />,
-  'Utilities': <Settings />
+  'Utilities': <Build />
 };
 
 function App() {
@@ -73,6 +75,20 @@ function App() {
   const [executionOutput, setExecutionOutput] = useState('');
   const [error, setError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  
+  // Schedule state
+  const [schedules, setSchedules] = useState([]);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [schedulePresets, setSchedulePresets] = useState([]);
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    name: '',
+    script_path: '',
+    cron_expression: '',
+    description: '',
+    enabled: true
+  });
+  const [cronValidation, setCronValidation] = useState(null);
 
   const theme = darkMode ? darkTheme : lightTheme;
 
@@ -128,6 +144,30 @@ function App() {
     }
   }, []);
 
+  const loadSchedules = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/schedules`);
+      const data = await response.json();
+      if (data.success) {
+        setSchedules(data.schedules || []);
+      }
+    } catch (err) {
+      console.error('Error loading schedules:', err);
+    }
+  }, []);
+
+  const loadSchedulePresets = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/schedules/presets`);
+      const data = await response.json();
+      if (data.success) {
+        setSchedulePresets(data.presets || []);
+      }
+    } catch (err) {
+      console.error('Error loading presets:', err);
+    }
+  }, []);
+
   // Initial data load
   useEffect(() => {
     const loadAllData = async () => {
@@ -137,7 +177,9 @@ function App() {
           loadCategories(),
           loadScripts(),
           loadStatistics(),
-          loadExecutions()
+          loadExecutions(),
+          loadSchedules(),
+          loadSchedulePresets()
         ]);
       } catch (err) {
         setError(err.message);
@@ -146,7 +188,7 @@ function App() {
       }
     };
     loadAllData();
-  }, [loadCategories, loadScripts, loadStatistics, loadExecutions]);
+  }, [loadCategories, loadScripts, loadStatistics, loadExecutions, loadSchedules, loadSchedulePresets]);
 
   const handleCategoryClick = async (category) => {
     setSelectedCategory(category);
@@ -214,6 +256,117 @@ function App() {
     setParameters(prev => ({ ...prev, [paramName]: value }));
   };
 
+  // Schedule handlers
+  const handleOpenScheduleDialog = (schedule = null) => {
+    if (schedule) {
+      setEditingSchedule(schedule);
+      setScheduleForm({
+        name: schedule.name,
+        script_path: schedule.script_path,
+        cron_expression: schedule.cron_expression,
+        description: schedule.description || '',
+        enabled: schedule.enabled
+      });
+    } else {
+      setEditingSchedule(null);
+      setScheduleForm({
+        name: '',
+        script_path: '',
+        cron_expression: '0 9 * * *',
+        description: '',
+        enabled: true
+      });
+    }
+    setCronValidation(null);
+    setScheduleDialogOpen(true);
+  };
+
+  const handleScheduleFormChange = (field, value) => {
+    setScheduleForm(prev => ({ ...prev, [field]: value }));
+    if (field === 'cron_expression') {
+      validateCron(value);
+    }
+  };
+
+  const validateCron = async (expression) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/schedules/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expression })
+      });
+      const data = await response.json();
+      setCronValidation(data);
+    } catch (err) {
+      setCronValidation({ valid: false, error: err.message });
+    }
+  };
+
+  const handleSaveSchedule = async () => {
+    try {
+      const url = editingSchedule 
+        ? `${API_BASE}/api/schedules/${editingSchedule.id}`
+        : `${API_BASE}/api/schedules`;
+      
+      const response = await fetch(url, {
+        method: editingSchedule ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(scheduleForm)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setScheduleDialogOpen(false);
+        loadSchedules();
+      } else {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteSchedule = async (scheduleId) => {
+    if (!window.confirm('Are you sure you want to delete this schedule?')) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/schedules/${scheduleId}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        loadSchedules();
+      } else {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleToggleSchedule = async (scheduleId, enabled) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/schedules/${scheduleId}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        loadSchedules();
+      } else {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const drawer = (
     <Box>
       <Toolbar>
@@ -230,6 +383,18 @@ function App() {
           >
             <ListItemIcon><DashboardIcon /></ListItemIcon>
             <ListItemText primary="Dashboard" />
+          </ListItemButton>
+        </ListItem>
+        <ListItem disablePadding>
+          <ListItemButton 
+            selected={currentView === 'schedules'}
+            onClick={() => setCurrentView('schedules')}
+          >
+            <ListItemIcon><Schedule /></ListItemIcon>
+            <ListItemText primary="Schedules" />
+            {schedules.length > 0 && (
+              <Chip size="small" label={schedules.length} color="primary" />
+            )}
           </ListItemButton>
         </ListItem>
         <ListItem disablePadding>
@@ -287,9 +452,9 @@ function App() {
         <Grid item xs={12} sm={6} md={3}>
           <Card elevation={3}>
             <CardContent>
-              <Typography color="textSecondary" gutterBottom>Total Executions</Typography>
+              <Typography color="textSecondary" gutterBottom>Scheduled Tasks</Typography>
               <Typography variant="h3" color="primary">
-                {statistics.total_executions || 0}
+                {schedules.filter(s => s.enabled).length}
               </Typography>
             </CardContent>
           </Card>
@@ -297,9 +462,9 @@ function App() {
         <Grid item xs={12} sm={6} md={3}>
           <Card elevation={3}>
             <CardContent>
-              <Typography color="textSecondary" gutterBottom>Recent (24h)</Typography>
+              <Typography color="textSecondary" gutterBottom>Total Executions</Typography>
               <Typography variant="h3" color="primary">
-                {statistics.recent_executions || 0}
+                {statistics.total_executions || 0}
               </Typography>
             </CardContent>
           </Card>
@@ -360,6 +525,15 @@ function App() {
           <Grid item>
             <Button 
               variant="contained" 
+              startIcon={<Schedule />}
+              onClick={() => setCurrentView('schedules')}
+            >
+              Manage Schedules
+            </Button>
+          </Grid>
+          <Grid item>
+            <Button 
+              variant="contained" 
               startIcon={<Security />}
               onClick={() => handleCategoryClick('Security')}
             >
@@ -384,6 +558,7 @@ function App() {
                 loadScripts();
                 loadStatistics();
                 loadExecutions();
+                loadSchedules();
               }}
             >
               Refresh All
@@ -391,6 +566,142 @@ function App() {
           </Grid>
         </Grid>
       </Box>
+    </Box>
+  );
+
+  const renderSchedules = () => (
+    <Box>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+          <Schedule sx={{ mr: 1, verticalAlign: 'bottom' }} />
+          Scheduled Tasks
+        </Typography>
+        <Box>
+          <Button 
+            startIcon={<Refresh />} 
+            onClick={loadSchedules}
+            sx={{ mr: 2 }}
+          >
+            Refresh
+          </Button>
+          <Button 
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => handleOpenScheduleDialog()}
+          >
+            New Schedule
+          </Button>
+        </Box>
+      </Box>
+
+      {schedules.length === 0 ? (
+        <Paper elevation={2} sx={{ p: 4, textAlign: 'center' }}>
+          <Schedule sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+          <Typography variant="h6" color="textSecondary" gutterBottom>
+            No Scheduled Tasks
+          </Typography>
+          <Typography color="textSecondary" paragraph>
+            Create a schedule to automatically run scripts on a cron schedule.
+          </Typography>
+          <Button 
+            variant="contained" 
+            startIcon={<Add />}
+            onClick={() => handleOpenScheduleDialog()}
+          >
+            Create First Schedule
+          </Button>
+        </Paper>
+      ) : (
+        <TableContainer component={Paper} elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Status</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Script</TableCell>
+                <TableCell>Schedule</TableCell>
+                <TableCell>Next Run</TableCell>
+                <TableCell>Last Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {schedules.map((schedule) => (
+                <TableRow key={schedule.id} hover>
+                  <TableCell>
+                    <Switch
+                      checked={schedule.enabled}
+                      onChange={(e) => handleToggleSchedule(schedule.id, e.target.checked)}
+                      color="success"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Typography fontWeight="medium">{schedule.name}</Typography>
+                    {schedule.description && (
+                      <Typography variant="caption" color="textSecondary" display="block">
+                        {schedule.description}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={schedule.script_name} 
+                      size="small"
+                      icon={categoryIcons[schedule.category] || <Folder />}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" fontFamily="monospace">
+                      {schedule.cron_expression}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {schedule.enabled && schedule.next_run ? (
+                      <Typography variant="body2">
+                        {new Date(schedule.next_run).toLocaleString()}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="textSecondary">
+                        {schedule.enabled ? 'Calculating...' : 'Disabled'}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {schedule.last_status ? (
+                      <Chip 
+                        label={schedule.last_status}
+                        size="small"
+                        color={schedule.last_status === 'success' ? 'success' : 'error'}
+                      />
+                    ) : (
+                      <Typography variant="body2" color="textSecondary">Never run</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Edit">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleOpenScheduleDialog(schedule)}
+                      >
+                        <Edit />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton 
+                        size="small" 
+                        color="error"
+                        onClick={() => handleDeleteSchedule(schedule.id)}
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
     </Box>
   );
 
@@ -439,16 +750,26 @@ function App() {
                     variant="outlined"
                   />
                 </CardContent>
-                <Box p={2} pt={0}>
+                <Box p={2} pt={0} display="flex" gap={1}>
                   <Button 
                     variant="contained" 
                     startIcon={<PlayArrow />}
                     onClick={() => handleScriptClick(script)}
-                    fullWidth
-                    color="primary"
+                    sx={{ flex: 1 }}
                   >
-                    Run Script
+                    Run
                   </Button>
+                  <Tooltip title="Schedule this script">
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        setScheduleForm(prev => ({ ...prev, script_path: script.path, name: `${script.name} Schedule` }));
+                        setScheduleDialogOpen(true);
+                      }}
+                    >
+                      <Schedule />
+                    </Button>
+                  </Tooltip>
                 </Box>
               </Card>
             </Grid>
@@ -572,6 +893,7 @@ function App() {
               {currentView === 'dashboard' && renderDashboard()}
               {currentView === 'scripts' && renderScripts()}
               {currentView === 'history' && renderHistory()}
+              {currentView === 'schedules' && renderSchedules()}
             </>
           )}
         </Box>
@@ -681,6 +1003,134 @@ function App() {
             color="primary"
           >
             {executing ? 'Executing...' : 'Execute Script'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Schedule Dialog */}
+      <Dialog 
+        open={scheduleDialogOpen} 
+        onClose={() => setScheduleDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {editingSchedule ? 'Edit Schedule' : 'Create Schedule'}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box display="flex" flexDirection="column" gap={3} pt={1}>
+            <TextField
+              label="Schedule Name"
+              fullWidth
+              required
+              value={scheduleForm.name}
+              onChange={(e) => handleScheduleFormChange('name', e.target.value)}
+              placeholder="e.g., Daily Security Audit"
+            />
+
+            <FormControl fullWidth required>
+              <InputLabel>Script</InputLabel>
+              <Select
+                value={scheduleForm.script_path}
+                label="Script"
+                onChange={(e) => handleScheduleFormChange('script_path', e.target.value)}
+              >
+                {scripts.map((script) => (
+                  <MenuItem key={script.path} value={script.path}>
+                    {script.name} ({script.category})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Schedule (Cron Expression)
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={8}>
+                  <TextField
+                    fullWidth
+                    required
+                    value={scheduleForm.cron_expression}
+                    onChange={(e) => handleScheduleFormChange('cron_expression', e.target.value)}
+                    placeholder="0 9 * * *"
+                    helperText="Format: minute hour day month weekday"
+                    error={cronValidation && !cronValidation.valid}
+                  />
+                </Grid>
+                <Grid item xs={4}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Presets</InputLabel>
+                    <Select
+                      value=""
+                      label="Presets"
+                      onChange={(e) => handleScheduleFormChange('cron_expression', e.target.value)}
+                    >
+                      {schedulePresets.map((preset) => (
+                        <MenuItem key={preset.expression} value={preset.expression}>
+                          {preset.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+              {cronValidation && (
+                <Box mt={1}>
+                  {cronValidation.valid ? (
+                    <Alert severity="success" sx={{ py: 0 }}>
+                      <Typography variant="body2">
+                        {cronValidation.description}
+                      </Typography>
+                      {cronValidation.next_runs && cronValidation.next_runs.length > 0 && (
+                        <Typography variant="caption" display="block">
+                          Next: {new Date(cronValidation.next_runs[0]).toLocaleString()}
+                        </Typography>
+                      )}
+                    </Alert>
+                  ) : (
+                    <Alert severity="error" sx={{ py: 0 }}>
+                      {cronValidation.error}
+                    </Alert>
+                  )}
+                </Box>
+              )}
+            </Box>
+
+            <TextField
+              label="Description (optional)"
+              fullWidth
+              multiline
+              rows={2}
+              value={scheduleForm.description}
+              onChange={(e) => handleScheduleFormChange('description', e.target.value)}
+              placeholder="What does this schedule do?"
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={scheduleForm.enabled}
+                  onChange={(e) => handleScheduleFormChange('enabled', e.target.checked)}
+                  color="success"
+                />
+              }
+              label={scheduleForm.enabled ? "Schedule is enabled" : "Schedule is disabled"}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setScheduleDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            variant="contained"
+            onClick={handleSaveSchedule}
+            disabled={!scheduleForm.name || !scheduleForm.script_path || !scheduleForm.cron_expression || (cronValidation && !cronValidation.valid)}
+            startIcon={<Schedule />}
+          >
+            {editingSchedule ? 'Update Schedule' : 'Create Schedule'}
           </Button>
         </DialogActions>
       </Dialog>
