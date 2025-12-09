@@ -1,0 +1,52 @@
+version: '3.8'
+
+# Development docker-compose with hot reload
+services:
+  # Flask Backend API with hot reload
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: m365-admin-backend-dev
+    ports:
+      - "5001:5001"
+    volumes:
+      # Mount source code for development
+      - ./app.py:/app/app.py
+      - ./utils:/app/utils
+      - ./config.json:/app/config.json
+      # Mount the Scripts directory
+      - ../../Scripts:/scripts:ro
+      # Mount Test_Results for reports
+      - ../../Tests/Test_Results:/test_results:rw
+      # Persist database
+      - ./data:/app/data
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - SCRIPTS_DIR=/scripts
+      - RESULTS_DIR=/test_results
+    restart: unless-stopped
+
+  # React Frontend with hot reload (development server)
+  frontend:
+    image: node:18-alpine
+    container_name: m365-admin-frontend-dev
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+    command: sh -c "npm install && npm start"
+    depends_on:
+      - backend
+    stdin_open: true
+
+networks:
+  default:
+    name: m365-admin-network-dev
+

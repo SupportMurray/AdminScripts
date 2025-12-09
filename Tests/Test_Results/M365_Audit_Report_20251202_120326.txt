@@ -1,0 +1,53 @@
+================================================================================
+    MICROSOFT 365 COMPREHENSIVE AUDIT REPORT
+================================================================================
+
+Generated: 2025-12-02 12:03:26
+Duration: 4.68 seconds
+Report Version: 1.0
+
+[2025-12-02 12:03:21] [Success] Connected to Microsoft Graph as: 
+[2025-12-02 12:03:21] [Info] Tenant ID: 
+[2025-12-02 12:03:21] [Section] Collecting Tenant Information
+[2025-12-02 12:03:21] [Error] Failed to retrieve tenant information: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:21] [Section] Analyzing User Accounts
+[2025-12-02 12:03:21] [Error] Failed to retrieve user statistics: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:21] [Section] Analyzing License Usage
+[2025-12-02 12:03:21] [Error] Failed to retrieve license information: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:21] [Section] Analyzing Security Posture
+[2025-12-02 12:03:21] [Warning] Could not retrieve MFA status: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:22] [Warning] Could not retrieve Conditional Access policies: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:22] [Info] 
+Privileged Role Assignments:
+[2025-12-02 12:03:23] [Warning] Could not retrieve directory role information: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:23] [Section] Analyzing Groups
+[2025-12-02 12:03:24] [Error] Failed to retrieve group information: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:24] [Section] Analyzing Applications and Service Principals
+[2025-12-02 12:03:26] [Error] Failed to retrieve application information: Authentication needed. Please call Connect-MgGraph.
+[2025-12-02 12:03:26] [Section] Analyzing Exchange Online Configuration
+[2025-12-02 12:03:26] [Info] Exchange Online module detected but not connected in this session.
+[2025-12-02 12:03:26] [Info] To enable Exchange auditing, run: Connect-ExchangeOnline
+[2025-12-02 12:03:26] [Section] Sign-In Analysis
+[2025-12-02 12:03:26] [Info] Sign-in log analysis skipped. Use -IncludeSignInLogs to enable.
+[2025-12-02 12:03:26] [Info] Note: Sign-in analysis requires Azure AD Premium licenses.
+[2025-12-02 12:03:26] [Section] Generating Report
+
+================================================================================
+    RECOMMENDATIONS AND ACTION ITEMS
+================================================================================
+
+1. Enable Exchange Online auditing for mailbox and transport rule analysis.
+
+================================================================================
+    AUDIT SUMMARY
+================================================================================
+
+Audit completed successfully.
+Total recommendations: 1
+
+For questions or assistance, refer to the Microsoft 365 Admin Center or
+contact your Microsoft support representative.
+
+================================================================================
+                            END OF REPORT
+================================================================================

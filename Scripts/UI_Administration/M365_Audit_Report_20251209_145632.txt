@@ -1,0 +1,185 @@
+================================================================================
+    MICROSOFT 365 COMPREHENSIVE AUDIT REPORT
+================================================================================
+
+Generated: 2025-12-09 14:56:32
+Duration: 14.65 seconds
+Report Version: 1.0
+
+[2025-12-09 14:56:17] [Warning] No valid Microsoft Graph connection found
+[2025-12-09 14:56:17] [Info] Initiating interactive authentication...
+[2025-12-09 14:56:20] [Success] Successfully authenticated to Microsoft Graph!
+[2025-12-09 14:56:20] [Success] Connected as: itadmin@trinity512.com
+[2025-12-09 14:56:20] [Success] Tenant ID: 8c962b56-21b1-4430-b6e1-7f776cee1169
+[2025-12-09 14:56:20] [Section] Validating Microsoft Graph Permissions
+[2025-12-09 14:56:21] [Success] ✓ Group.Read.All - OK
+[2025-12-09 14:56:22] [Success] ✓ User.Read.All - OK
+[2025-12-09 14:56:22] [Success] ✓ Directory.Read.All - OK
+[2025-12-09 14:56:22] [Success] ✓ Organization.Read.All - OK
+[2025-12-09 14:56:22] [Success] All permission checks passed successfully!
+[2025-12-09 14:56:22] [Section] Collecting Tenant Information
+[2025-12-09 14:56:22] [Success] Organization Name: Murray logistics
+[2025-12-09 14:56:22] [Info] Tenant ID: 8c962b56-21b1-4430-b6e1-7f776cee1169
+[2025-12-09 14:56:22] [Info] Initial Domain: trinity512.onmicrosoft.com
+[2025-12-09 14:56:22] [Info] Country: US
+[2025-12-09 14:56:22] [Info] Created Date: 03/29/2016 19:17:35
+[2025-12-09 14:56:22] [Info] Verified Email Domains: 6
+[2025-12-09 14:56:22] [Info]   - murraytruck.com 
+[2025-12-09 14:56:22] [Info]   - murray-logistics.com 
+[2025-12-09 14:56:22] [Info]   - thenationalroadproject.com 
+[2025-12-09 14:56:22] [Info]   - thenationalroadproject.org 
+[2025-12-09 14:56:22] [Info]   - loadmanager.io 
+[2025-12-09 14:56:22] [Info]   - certachain.io 
+[2025-12-09 14:56:22] [Section] Analyzing User Accounts
+[2025-12-09 14:56:24] [Info] Total Users: 136
+[2025-12-09 14:56:24] [Info]   - Enabled: 100
+[2025-12-09 14:56:24] [Info]   - Disabled: 36
+[2025-12-09 14:56:24] [Info]   - Licensed: 79
+[2025-12-09 14:56:24] [Info]   - Unlicensed: 57
+[2025-12-09 14:56:24] [Info]   - Member Users: 133
+[2025-12-09 14:56:24] [Info]   - Guest Users: 3
+[2025-12-09 14:56:24] [Info] Users with sign-in activity (last 30 days): 45
+[2025-12-09 14:56:24] [Warning] Inactive licensed users (no sign-in in 90+ days): 11
+[2025-12-09 14:56:24] [Info] Sample inactive users:
+[2025-12-09 14:56:24] [Info]   - 3plcalls@3pl-intl.com - Last sign-in: Never
+[2025-12-09 14:56:24] [Info]   - Amber@trinity512.com - Last sign-in: 04/21/2025 13:48:24
+[2025-12-09 14:56:24] [Info]   - ar@3pl-intl.com - Last sign-in: Never
+[2025-12-09 14:56:24] [Info]   - eduardo.garcia@trinity512.com - Last sign-in: 08/27/2025 15:34:11
+[2025-12-09 14:56:24] [Info]   - ellen.koncak@trinity512.com - Last sign-in: 08/18/2025 21:01:36
+[2025-12-09 14:56:24] [Info]   - John.dorsey@trinity512.com - Last sign-in: Never
+[2025-12-09 14:56:24] [Info]   - notifications@trinity512.com - Last sign-in: Never
+[2025-12-09 14:56:24] [Info]   - request@loadmanager.io - Last sign-in: 06/25/2025 02:48:19
+[2025-12-09 14:56:24] [Info]   - sales.b8@trinity512.com - Last sign-in: Never
+[2025-12-09 14:56:24] [Info]   - support.z12@certachain.io - Last sign-in: Never
+[2025-12-09 14:56:24] [Info] New users created (last 30 days): 3
+[2025-12-09 14:56:24] [Section] Analyzing License Usage
+[2025-12-09 14:56:24] [Info] License Summary:
+[2025-12-09 14:56:24] [Info]   STREAM
+[2025-12-09 14:56:24] [Info]     Total: 1000000 | Assigned: 0 | Available: 1000000 | Utilization: 0%
+[2025-12-09 14:56:24] [Info]   THREAT_INTELLIGENCE
+[2025-12-09 14:56:24] [Info]     Total: 5 | Assigned: 5 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   POWER_BI_PRO
+[2025-12-09 14:56:24] [Info]     Total: 3 | Assigned: 3 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   WINDOWS_STORE
+[2025-12-09 14:56:24] [Info]     Total: 1000025 | Assigned: 0 | Available: 1000025 | Utilization: 0%
+[2025-12-09 14:56:24] [Info]   ENTERPRISEPACK
+[2025-12-09 14:56:24] [Info]     Total: 3 | Assigned: 2 | Available: 1 | Utilization: 66.67%
+[2025-12-09 14:56:24] [Info]   FLOW_FREE
+[2025-12-09 14:56:24] [Info]     Total: 10000 | Assigned: 27 | Available: 9973 | Utilization: 0.27%
+[2025-12-09 14:56:24] [Info]   MCOEV
+[2025-12-09 14:56:24] [Info]     Total: 37 | Assigned: 36 | Available: 1 | Utilization: 97.3%
+[2025-12-09 14:56:24] [Info]   O365DOMAINSTANDARD
+[2025-12-09 14:56:24] [Info]     Total: 3 | Assigned: 0 | Available: 3 | Utilization: 0%
+[2025-12-09 14:56:24] [Info]   PHONESYSTEM_VIRTUALUSER
+[2025-12-09 14:56:24] [Info]     Total: 21 | Assigned: 21 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   CCIBOTS_PRIVPREV_VIRAL
+[2025-12-09 14:56:24] [Info]     Total: 10000 | Assigned: 1 | Available: 9999 | Utilization: 0.01%
+[2025-12-09 14:56:24] [Info]   SPB
+[2025-12-09 14:56:24] [Info]     Total: 46 | Assigned: 46 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   Microsoft_Teams_Exploratory_Dept
+[2025-12-09 14:56:24] [Info]     Total: 0 | Assigned: 0 | Available: 0 | Utilization: 0%
+[2025-12-09 14:56:24] [Info]   MEETING_ROOM
+[2025-12-09 14:56:24] [Info]     Total: 1 | Assigned: 1 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   POWER_BI_STANDARD
+[2025-12-09 14:56:24] [Info]     Total: 1000002 | Assigned: 14 | Available: 999988 | Utilization: 0%
+[2025-12-09 14:56:24] [Info]   MCOPSTNC
+[2025-12-09 14:56:24] [Info]     Total: 10000000 | Assigned: 1 | Available: 9999999 | Utilization: 0%
+[2025-12-09 14:56:24] [Info]   Power_Pages_vTrial_for_Makers
+[2025-12-09 14:56:24] [Info]     Total: 10000 | Assigned: 1 | Available: 9999 | Utilization: 0.01%
+[2025-12-09 14:56:24] [Info]   EXCHANGEARCHIVE
+[2025-12-09 14:56:24] [Info]     Total: 7 | Assigned: 7 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   VISIOONLINE_PLAN1
+[2025-12-09 14:56:24] [Info]     Total: 1 | Assigned: 1 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   O365_BUSINESS_ESSENTIALS
+[2025-12-09 14:56:24] [Info]     Total: 10 | Assigned: 10 | Available: 0 | Utilization: 100%
+[2025-12-09 14:56:24] [Info]   Teams_Premium_(for_Departments)
+[2025-12-09 14:56:24] [Info]     Total: 0 | Assigned: 0 | Available: 0 | Utilization: 0%
+[2025-12-09 14:56:24] [Info] 
+Total License Summary:
+[2025-12-09 14:56:24] [Info]   Total licenses: 13030164
+[2025-12-09 14:56:24] [Info]   Assigned licenses: 176
+[2025-12-09 14:56:24] [Info]   Available licenses: 13029988
+[2025-12-09 14:56:24] [Info]   Overall utilization: 0%
+[2025-12-09 14:56:24] [Section] Analyzing Security Posture
+[2025-12-09 14:56:24] [Info] MFA Registration Status:
+[2025-12-09 14:56:24] [Info]   Total users analyzed: 100
+[2025-12-09 14:56:24] [Info]   MFA registered: 55 (55%)
+[2025-12-09 14:56:24] [Info]   MFA capable: 55
+[2025-12-09 14:56:26] [Info] 
+Conditional Access Policies:
+[2025-12-09 14:56:26] [Info]   Total policies: 5
+[2025-12-09 14:56:26] [Info]   Enabled: 2
+[2025-12-09 14:56:26] [Info]   Disabled: 1
+[2025-12-09 14:56:26] [Info]   Report-only: 2
+[2025-12-09 14:56:26] [Info] 
+  Enabled Policies:
+[2025-12-09 14:56:26] [Info]     - CA004: Require multifactor authentication for all users
+[2025-12-09 14:56:26] [Info]     - Microsoft-managed: Multifactor authentication for per-user multifactor authentication users
+[2025-12-09 14:56:26] [Info] 
+Privileged Role Assignments:
+[2025-12-09 14:56:26] [Info]   Global Administrator: 5 member(s)
+[2025-12-09 14:56:26] [Info]   Privileged Role Administrator: 1 member(s)
+[2025-12-09 14:56:27] [Info]   Security Administrator: 2 member(s)
+[2025-12-09 14:56:27] [Info]   Exchange Administrator: 6 member(s)
+[2025-12-09 14:56:27] [Info]   SharePoint Administrator: 4 member(s)
+[2025-12-09 14:56:27] [Info]   User Administrator: 7 member(s)
+[2025-12-09 14:56:27] [Info] 
+Total users with privileged roles: 25
+[2025-12-09 14:56:27] [Section] Analyzing Groups
+[2025-12-09 14:56:27] [Info] Group Summary:
+[2025-12-09 14:56:27] [Info]   Total groups: 73
+[2025-12-09 14:56:27] [Info]   Microsoft 365 Groups: 45
+[2025-12-09 14:56:27] [Info]   Security Groups: 20
+[2025-12-09 14:56:27] [Info]   Distribution Groups: 8
+[2025-12-09 14:56:27] [Info]   Groups created (last 30 days): 1
+[2025-12-09 14:56:27] [Section] Analyzing Applications and Service Principals
+[2025-12-09 14:56:32] [Info] Registered Applications: 34
+[2025-12-09 14:56:32] [Info] Service Principals: 899
+[2025-12-09 14:56:32] [Warning] Applications with credentials expiring in 30 days: 1
+[2025-12-09 14:56:32] [Warning]   - Get-CSTeamsPSTNCallRecords expires on 2026-01-07
+[2025-12-09 14:56:32] [Section] Analyzing Exchange Online Configuration
+[2025-12-09 14:56:32] [Info] Exchange Online module detected but not connected in this session.
+[2025-12-09 14:56:32] [Info] To enable Exchange auditing, run: Connect-ExchangeOnline
+[2025-12-09 14:56:32] [Section] Sign-In Analysis
+[2025-12-09 14:56:32] [Info] Sign-in log analysis skipped. Use -IncludeSignInLogs to enable.
+[2025-12-09 14:56:32] [Info] Note: Sign-in analysis requires Azure AD Premium licenses.
+[2025-12-09 14:56:32] [Section] Generating Report
+
+================================================================================
+    RECOMMENDATIONS AND ACTION ITEMS
+================================================================================
+
+1. Review 11 inactive licensed users for potential license reclamation
+2. License pool 'STREAM' has low utilization (0%). Review if licenses can be reduced.
+3. License pool 'THREAT_INTELLIGENCE' is at 100% utilization. Consider purchasing additional licenses.
+4. License pool 'POWER_BI_PRO' is at 100% utilization. Consider purchasing additional licenses.
+5. License pool 'WINDOWS_STORE' has low utilization (0%). Review if licenses can be reduced.
+6. License pool 'FLOW_FREE' has low utilization (0.27%). Review if licenses can be reduced.
+7. License pool 'MCOEV' is at 97.3% utilization. Consider purchasing additional licenses.
+8. License pool 'PHONESYSTEM_VIRTUALUSER' is at 100% utilization. Consider purchasing additional licenses.
+9. License pool 'CCIBOTS_PRIVPREV_VIRAL' has low utilization (0.01%). Review if licenses can be reduced.
+10. License pool 'SPB' is at 100% utilization. Consider purchasing additional licenses.
+11. License pool 'MEETING_ROOM' is at 100% utilization. Consider purchasing additional licenses.
+12. License pool 'POWER_BI_STANDARD' has low utilization (0%). Review if licenses can be reduced.
+13. License pool 'MCOPSTNC' has low utilization (0%). Review if licenses can be reduced.
+14. License pool 'Power_Pages_vTrial_for_Makers' has low utilization (0.01%). Review if licenses can be reduced.
+15. License pool 'EXCHANGEARCHIVE' is at 100% utilization. Consider purchasing additional licenses.
+16. License pool 'VISIOONLINE_PLAN1' is at 100% utilization. Consider purchasing additional licenses.
+17. License pool 'O365_BUSINESS_ESSENTIALS' is at 100% utilization. Consider purchasing additional licenses.
+18. Only 55% of users have MFA registered. Target: 95%+ MFA adoption.
+19. Review and renew credentials for 1 applications expiring within 30 days.
+20. Enable Exchange Online auditing for mailbox and transport rule analysis.
+
+================================================================================
+    AUDIT SUMMARY
+================================================================================
+
+Audit completed successfully.
+Total recommendations: 20
+
+For questions or assistance, refer to the Microsoft 365 Admin Center or
+contact your Microsoft support representative.
+
+================================================================================
+                            END OF REPORT
+================================================================================

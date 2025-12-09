@@ -1,0 +1,22 @@
+version: '3.8'
+
+# Frontend-only Docker deployment
+# Backend runs on host where PowerShell is installed
+services:
+  # React Frontend (Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: m365-admin-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - BACKEND_URL=http://host.docker.internal:5001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: m365-admin-network

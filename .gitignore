@@ -1,0 +1,72 @@
+# Environment and Configuration Files
+.env.ps1
+.env
+config.json
+secrets.json
+
+# Certificates
+*.pfx
+*.cer
+*.pem
+*.key
+
+# Credentials
+credentials.xml
+*.cred
+
+# Test Data (if it contains real data)
+Tests/Test_Results/*.log
+Tests/Test_Results/*.csv
+Tests/Test_Results/*.json
+
+# PowerShell Session History
+ConsoleHost_history.txt
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary Files
+*.tmp
+*.bak
+*.old
+*~
+
+# Build artifacts
+bin/
+obj/
+*.dll
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Package Management
+node_modules/
+package-lock.json
+
+# Python (if used for tooling)
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# Backup files
+*_backup*
+*.backup
+

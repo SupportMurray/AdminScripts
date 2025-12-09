@@ -1,0 +1,40 @@
+================================================================================
+    MICROSOFT 365 COMPREHENSIVE AUDIT REPORT
+================================================================================
+
+Generated: 2025-12-02 12:13:53
+Duration: 321.21 seconds
+Report Version: 1.0
+
+[2025-12-02 12:08:32] [Warning] No valid Microsoft Graph connection found
+[2025-12-02 12:08:32] [Info] Initiating interactive authentication...
+[2025-12-02 12:08:45] [Success] Successfully authenticated to Microsoft Graph!
+[2025-12-02 12:08:45] [Success] Connected as: itadmin@trinity512.com
+[2025-12-02 12:08:45] [Success] Tenant ID: 8c962b56-21b1-4430-b6e1-7f776cee1169
+[2025-12-02 12:08:45] [Section] Validating Microsoft Graph Permissions
+[2025-12-02 12:13:45] [Error] ✗ User.Read.All - FAILED
+[2025-12-02 12:13:52] [Success] ✓ Directory.Read.All - OK
+[2025-12-02 12:13:53] [Success] ✓ Group.Read.All - OK
+[2025-12-02 12:13:53] [Success] ✓ Organization.Read.All - OK
+[2025-12-02 12:13:53] [Error] Audit cannot proceed due to insufficient permissions
+[2025-12-02 12:13:53] [Section] Generating Report
+
+================================================================================
+    RECOMMENDATIONS AND ACTION ITEMS
+================================================================================
+
+1. Grant required Microsoft Graph permissions to run comprehensive audits
+
+================================================================================
+    AUDIT SUMMARY
+================================================================================
+
+Audit completed successfully.
+Total recommendations: 1
+
+For questions or assistance, refer to the Microsoft 365 Admin Center or
+contact your Microsoft support representative.
+
+================================================================================
+                            END OF REPORT
+================================================================================
